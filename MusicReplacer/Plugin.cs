@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace MusicReplacer
 {
-    [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
+    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.0.0")]
     public class Plugin : BaseUnityPlugin
     {
         public static string AudioPath = Path.Combine(Path.GetFullPath("."), "mod_overrides\\MusicReplacements");
@@ -56,7 +56,9 @@ namespace MusicReplacer
             string[] files = Directory.GetFiles(AudioPath);
             foreach (string file in files)
             {
+                Logger.LogDebug("File located: " + file);
                 AudioTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), file);
+                Logger.LogInfo("Added replacement track: " + Path.GetFileNameWithoutExtension(file).ToLower());
             }
 
         }
@@ -66,6 +68,9 @@ namespace MusicReplacer
         {
             Directory.CreateDirectory(AudioPath);
             DirectoryScan(AudioPath);
+
+            var harmony = new Harmony("com.kuborro.plugins.fp2.musicreplacer");
+            harmony.PatchAll(typeof(Patch));
         }
     }
 
@@ -76,9 +81,9 @@ namespace MusicReplacer
         static void Prefix(ref AudioClip bgmMusic)
         {
             if (bgmMusic == null) return;
-            if (Plugin.AudioTracks.ContainsKey(bgmMusic.name))
+            if (Plugin.AudioTracks.ContainsKey(bgmMusic.name.ToLower()))
             {
-                string trackPath = Plugin.AudioTracks[bgmMusic.name];
+                string trackPath = Plugin.AudioTracks[bgmMusic.name.ToLower()];
                 string ext = Path.GetExtension(trackPath);
                 bool stream = true;
                 if (ext == "")
