@@ -109,7 +109,7 @@ namespace MusicReplacer
                     AudioClip selectedClip = audioLoader.GetAudioClip(false, stream, Plugin.GetAudioType(ext));
                     while (!(selectedClip.loadState == AudioDataLoadState.Loaded))
                     {
-                        int i = 1;
+                        System.Threading.Thread.Sleep(1);
                     }
                     selectedClip.name = bgmMusic.name;
                     bgmMusic = selectedClip;
