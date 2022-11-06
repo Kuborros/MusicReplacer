@@ -56,7 +56,7 @@ namespace MusicReplacer
             string[] files = Directory.GetFiles(AudioPath);
             foreach (string file in files)
             {
-
+                AudioTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), file);
             }
 
         }
@@ -76,6 +76,33 @@ namespace MusicReplacer
         static void Prefix(ref AudioClip bgmMusic)
         {
             if (bgmMusic == null) return;
+            if (Plugin.AudioTracks.ContainsKey(bgmMusic.name))
+            {
+                string trackPath = Plugin.AudioTracks[bgmMusic.name];
+                string ext = Path.GetExtension(trackPath);
+                bool stream = true;
+                if (ext == "")
+                {
+                    ext = ".wav";
+                    trackPath += ext;
+                }
+                if (ext is ".mod" or ".s3m" or ".it" or ".xm")
+                {
+                    stream = false;
+                }
+                if (File.Exists(trackPath) && Plugin.GetAudioType(ext) != AudioType.UNKNOWN)
+                {
+                    WWW audioLoader = new(Plugin.FilePathToFileUrl(trackPath));
+                    AudioClip selectedClip = audioLoader.GetAudioClip(false, stream, Plugin.GetAudioType(ext));
+                    while (!(selectedClip.loadState == AudioDataLoadState.Loaded))
+                    {
+                        int i = 1;
+                    }
+                    selectedClip.name = bgmMusic.name;
+                    bgmMusic = selectedClip;
+                }
+
+            }
         }
     }
 }
