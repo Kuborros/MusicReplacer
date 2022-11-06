@@ -5,6 +5,7 @@ using System;
 using UnityEngine;
 using HarmonyLib;
 using System.Collections.Generic;
+using Object = UnityEngine.Object;
 
 namespace MusicReplacer
 {
@@ -13,6 +14,7 @@ namespace MusicReplacer
     {
         public static string AudioPath = Path.Combine(Path.GetFullPath("."), "mod_overrides\\MusicReplacements");
         public static Dictionary<string,string> AudioTracks = new();
+        public static AudioClip LastTrack;
         public static string FilePathToFileUrl(string filePath)
         {
             StringBuilder uri = new();
@@ -80,6 +82,12 @@ namespace MusicReplacer
         [HarmonyPatch(typeof(FPAudio), nameof(FPAudio.PlayMusic), new Type[] { typeof(AudioClip), typeof(float) })]
         static void Prefix(ref AudioClip bgmMusic)
         {
+            if (Plugin.LastTrack != null)
+            {
+                Object.Destroy(Plugin.LastTrack);
+                Plugin.LastTrack = null;
+            }
+
             if (bgmMusic == null) return;
             if (Plugin.AudioTracks.ContainsKey(bgmMusic.name.ToLower()))
             {
@@ -105,6 +113,7 @@ namespace MusicReplacer
                     }
                     selectedClip.name = bgmMusic.name;
                     bgmMusic = selectedClip;
+                    Plugin.LastTrack = selectedClip;
                 }
 
             }
