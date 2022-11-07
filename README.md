@@ -1,4 +1,4 @@
-# MusicReplacer
+# FP2MusicReplacer
 
 ## Installation:
 To install the mod extract the downloaded zip file contents from the releases tab into the main game directory.  
