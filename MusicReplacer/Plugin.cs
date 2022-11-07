@@ -6,14 +6,16 @@ using UnityEngine;
 using HarmonyLib;
 using System.Collections.Generic;
 using Object = UnityEngine.Object;
+using System.Reflection.Emit;
 
 namespace MusicReplacer
 {
     [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.0.0")]
+    [BepInProcess("FP2.exe")]
     public class Plugin : BaseUnityPlugin
     {
         public static string AudioPath = Path.Combine(Path.GetFullPath("."), "mod_overrides\\MusicReplacements");
-        public static Dictionary<string,string> AudioTracks = new();
+        public static Dictionary<string, string> AudioTracks = new();
         public static AudioClip LastTrack;
         public static string FilePathToFileUrl(string filePath)
         {
@@ -72,11 +74,12 @@ namespace MusicReplacer
             DirectoryScan(AudioPath);
 
             var harmony = new Harmony("com.kuborro.plugins.fp2.musicreplacer");
-            harmony.PatchAll(typeof(Patch));
+            harmony.PatchAll(typeof(PatchMusicPlayer));
+            harmony.PatchAll(typeof(PatchMergaFight));
         }
     }
 
-    class Patch
+    class PatchMusicPlayer
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FPAudio), nameof(FPAudio.PlayMusic), new Type[] { typeof(AudioClip), typeof(float) })]
@@ -117,6 +120,30 @@ namespace MusicReplacer
                 }
 
             }
+        }
+    }
+    class PatchMergaFight
+    {
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(MergaBlueMoon), "Activate", MethodType.Normal)]
+        [HarmonyPatch(typeof(MergaBloodMoon), "Activate", MethodType.Normal)]
+        [HarmonyPatch(typeof(MergaSupermoon), "Activate", MethodType.Normal)]
+        [HarmonyPatch(typeof(MergaLilith), "Activate", MethodType.Normal)]
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            List<CodeInstruction> codes = new(instructions);
+            for (int i = 5; i < codes.Count; i++)
+            {
+                if (codes[i].opcode == OpCodes.Brfalse && codes[i - 1].opcode == OpCodes.Call && codes[i - 2].opcode == OpCodes.Ldfld && codes[i - 3].opcode == OpCodes.Ldarg_0 && codes[i - 4].opcode == OpCodes.Call)
+                {
+                    codes[i - 3].opcode = OpCodes.Nop; //Ldarg.0
+                    codes[i - 2].opcode = OpCodes.Nop; //Ldfld
+                    codes[i - 1].opcode = OpCodes.Nop; //Call
+                    codes[i].opcode = OpCodes.Brtrue; //BrFalse
+                    break;
+                };
+            }
+            return codes;
         }
     }
 }
