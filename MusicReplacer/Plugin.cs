@@ -7,15 +7,18 @@ using HarmonyLib;
 using System.Collections.Generic;
 using Object = UnityEngine.Object;
 using System.Reflection.Emit;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace MusicReplacer
 {
-    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.0.0")]
+    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.1.0")]
     [BepInProcess("FP2.exe")]
     public class Plugin : BaseUnityPlugin
     {
         public static string AudioPath = Path.Combine(Path.GetFullPath("."), "mod_overrides\\MusicReplacements");
+        public static string SFXPath = Path.Combine(Path.GetFullPath("."), "mod_overrides\\SFXReplacements");
         public static Dictionary<string, string> AudioTracks = new();
+        public static Dictionary<string, AudioClip> SFXTracks = new();
         public static AudioClip LastTrack;
         public static string FilePathToFileUrl(string filePath)
         {
@@ -57,7 +60,7 @@ namespace MusicReplacer
 
         void DirectoryScan(string path)
         {
-            string[] files = Directory.GetFiles(AudioPath);
+            string[] files = Directory.GetFiles(path);
             foreach (string file in files)
             {
                 Logger.LogDebug("File located: " + file);
@@ -67,14 +70,38 @@ namespace MusicReplacer
 
         }
 
+        void SFXScan(string path)
+        {
+            string[] files = Directory.GetFiles(path);
+            foreach (string file in files)
+            {
+                Logger.LogDebug("SFX File located: " + file);
+                string ext = Path.GetExtension(file);
+                if (File.Exists(file) && (GetAudioType(ext) == AudioType.OGGVORBIS || GetAudioType(ext) == AudioType.WAV))
+                {
+                    WWW audioLoader = new(FilePathToFileUrl(file));
+                    AudioClip SFXClip = audioLoader.GetAudioClip(false, false, GetAudioType(ext));
+                    while (!(SFXClip.loadState == AudioDataLoadState.Loaded))
+                    {
+                        System.Threading.Thread.Sleep(1);
+                    }
+                    SFXClip.hideFlags = HideFlags.DontUnloadUnusedAsset;
+                    SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), SFXClip);
+                    Logger.LogInfo("Added replacement SFX: " + Path.GetFileNameWithoutExtension(file).ToLower());
+                }
+            }
+        }
 
         private void Awake()
         {
             Directory.CreateDirectory(AudioPath);
             DirectoryScan(AudioPath);
+            Directory.CreateDirectory(SFXPath);
+            SFXScan(SFXPath);
 
             var harmony = new Harmony("com.kuborro.plugins.fp2.musicreplacer");
             harmony.PatchAll(typeof(PatchMusicPlayer));
+            harmony.PatchAll(typeof(PatchSFXPlayer));
             harmony.PatchAll(typeof(PatchMergaFight));
         }
     }
@@ -122,6 +149,22 @@ namespace MusicReplacer
             }
         }
     }
+
+    class PatchSFXPlayer
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(AudioSource), nameof(AudioSource.PlayOneShot), new Type[] { typeof(AudioClip), typeof(float) })]
+        static void Prefix(ref AudioClip clip)
+        {
+            if (clip == null) return;
+            if (Plugin.SFXTracks.ContainsKey(clip.name.ToLower()))
+            {
+                clip = Plugin.SFXTracks[clip.name.ToLower()];
+            }
+
+        }
+    }
+
     class PatchMergaFight
     {
         [HarmonyTranspiler]
