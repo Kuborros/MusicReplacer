@@ -148,7 +148,7 @@ namespace MusicReplacer
                         if (___musicLoopPoints[i].name == bgmMusic.name)
                         {
                             ___musicLoopPoints[i].loopStart = 0;
-                            ___musicLoopPoints[i].loopEnd = bgmMusic.length;
+                            ___musicLoopPoints[i].loopEnd = selectedClip.length;
                         }
                     }
                     bgmMusic = selectedClip;
