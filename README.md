@@ -24,6 +24,7 @@ Place replacement files in mod_overrides\SFXReplacements. The file name must mat
 ## Supported SFX formats:
 
 Ogg Vorbis (.ogg)
+
 Microsoft Wave (.wav)
 
 
