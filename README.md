@@ -18,13 +18,13 @@ Impulse Tracker module (.it)
 Scream Tracker module (.s3m)  
 FastTracker 2 module (.xm)  
 
-#Replacing SFX/Voice:
+# Replacing SFX/Voice:
 Place replacement files in mod_overrides\SFXReplacements. The file name must match the name of the sound you want to replace - all SFX names are provided in SFXList.txt
 
-##Supported SFX formats:
+## Supported SFX formats:
 
-    Ogg Vorbis (.ogg)
-    Microsoft Wave (.wav)
+Ogg Vorbis (.ogg)
+Microsoft Wave (.wav)
 
 
 All custom SFX files are loaded at launch of the game, which might make it take longer to load.
