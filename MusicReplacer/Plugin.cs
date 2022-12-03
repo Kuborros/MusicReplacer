@@ -11,7 +11,7 @@ using System.Linq;
 
 namespace MusicReplacer
 {
-    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.1.0")]
+    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.1.1")]
     [BepInProcess("FP2.exe")]
     public class Plugin : BaseUnityPlugin
     {
