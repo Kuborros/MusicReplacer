@@ -7,7 +7,6 @@ using HarmonyLib;
 using System.Collections.Generic;
 using Object = UnityEngine.Object;
 using System.Reflection.Emit;
-using System.Runtime.InteropServices.ComTypes;
 
 namespace MusicReplacer
 {
@@ -159,6 +158,7 @@ namespace MusicReplacer
             if (clip == null) return;
             if (Plugin.SFXTracks.ContainsKey(clip.name.ToLower()))
             {
+                Plugin.SFXTracks[clip.name.ToLower()].name = clip.name;
                 clip = Plugin.SFXTracks[clip.name.ToLower()];
             }
 
