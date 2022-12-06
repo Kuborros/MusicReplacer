@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using Object = UnityEngine.Object;
 using System.Reflection.Emit;
 using System.Linq;
+using BepInEx.Configuration;
 
 namespace MusicReplacer
 {
@@ -110,7 +111,7 @@ namespace MusicReplacer
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FPAudio), nameof(FPAudio.PlayMusic), new Type[] { typeof(AudioClip), typeof(float) })]
-        static void Prefix(ref AudioClip bgmMusic,ref FPAudioLoopData[] ___musicLoopPoints)
+        static void Prefix(ref AudioClip bgmMusic, ref FPAudioLoopData[] ___musicLoopPoints)
         {
             if (Plugin.LastTrack != null)
             {
@@ -141,16 +142,8 @@ namespace MusicReplacer
                     {
                         System.Threading.Thread.Sleep(1);
                     }
-                    selectedClip.name = bgmMusic.name;
+                    selectedClip.name = (bgmMusic.name + "_modded").ToLower();
 
-                    for (int i = 0; i < ___musicLoopPoints.Length; i++)
-                    {
-                        if (___musicLoopPoints[i].name == bgmMusic.name)
-                        {
-                            ___musicLoopPoints[i].loopStart = 0;
-                            ___musicLoopPoints[i].loopEnd = selectedClip.length;
-                        }
-                    }
                     bgmMusic = selectedClip;
                     Plugin.LastTrack = selectedClip;
                 }
