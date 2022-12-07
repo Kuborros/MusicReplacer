@@ -12,7 +12,7 @@ using BepInEx.Configuration;
 
 namespace MusicReplacer
 {
-    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.1.1")]
+    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.1.2")]
     [BepInProcess("FP2.exe")]
     public class Plugin : BaseUnityPlugin
     {
@@ -137,6 +137,11 @@ namespace MusicReplacer
                 if (File.Exists(trackPath) && Plugin.GetAudioType(ext) != AudioType.UNKNOWN)
                 {
                     WWW audioLoader = new(Plugin.FilePathToFileUrl(trackPath));
+
+                    while (!audioLoader.isDone)
+                    {
+                        System.Threading.Thread.Sleep(1);
+                    }
                     AudioClip selectedClip = audioLoader.GetAudioClip(false, stream, Plugin.GetAudioType(ext));
                     while (!(selectedClip.loadState == AudioDataLoadState.Loaded))
                     {
