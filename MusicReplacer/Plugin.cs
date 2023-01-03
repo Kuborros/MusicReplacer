@@ -7,12 +7,10 @@ using HarmonyLib;
 using System.Collections.Generic;
 using Object = UnityEngine.Object;
 using System.Reflection.Emit;
-using System.Linq;
-using BepInEx.Configuration;
 
 namespace MusicReplacer
 {
-    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.1.2")]
+    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.1.3")]
     [BepInProcess("FP2.exe")]
     public class Plugin : BaseUnityPlugin
     {
@@ -104,6 +102,7 @@ namespace MusicReplacer
             harmony.PatchAll(typeof(PatchMusicPlayer));
             harmony.PatchAll(typeof(PatchSFXPlayer));
             harmony.PatchAll(typeof(PatchMergaFight));
+            harmony.PatchAll(typeof(PatchCutscenePlayer));
         }
     }
 
@@ -168,6 +167,22 @@ namespace MusicReplacer
             {
                 Plugin.SFXTracks[clip.name.ToLower()].name = clip.name;
                 clip = Plugin.SFXTracks[clip.name.ToLower()];
+            }
+
+        }
+    }
+
+    class PatchCutscenePlayer
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(AudioSource), nameof(AudioSource.clip), MethodType.Setter)]
+        static void Prefix(ref AudioClip value)
+        {
+            if (value == null) return;
+            if (Plugin.SFXTracks.ContainsKey(value.name.ToLower()))
+            {
+                Plugin.SFXTracks[value.name.ToLower()].name = value.name;
+                value = Plugin.SFXTracks[value.name.ToLower()];
             }
 
         }
