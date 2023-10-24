@@ -7,18 +7,22 @@ using HarmonyLib;
 using System.Collections.Generic;
 using Object = UnityEngine.Object;
 using System.Reflection.Emit;
+using BepInEx.Logging;
 
 namespace MusicReplacer
 {
-    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.1.3")]
+    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.2.0")]
     [BepInProcess("FP2.exe")]
     public class Plugin : BaseUnityPlugin
     {
         public static string AudioPath = Path.Combine(Path.GetFullPath("."), "mod_overrides\\MusicReplacements");
         public static string SFXPath = Path.Combine(Path.GetFullPath("."), "mod_overrides\\SFXReplacements");
-        public static Dictionary<string, string> AudioTracks = new();
+        public static Dictionary<string, AuxTrack> AudioTracks = new();
         public static Dictionary<string, AudioClip> SFXTracks = new();
         public static AudioClip LastTrack;
+        public static ManualLogSource logger = BepInEx.Logging.Logger.CreateLogSource("Music Replacer");
+
+
         public static string FilePathToFileUrl(string filePath)
         {
             StringBuilder uri = new();
@@ -36,7 +40,7 @@ namespace MusicReplacer
                 }
                 else
                 {
-                    uri.Append(String.Format("%{0:X2}", (int)v));
+                    uri.Append(string.Format("%{0:X2}", (int)v));
                 }
             }
             if (uri.Length >= 2 && uri[0] == '/' && uri[1] == '/') // UNC path
@@ -45,16 +49,32 @@ namespace MusicReplacer
                 uri.Insert(0, "file:///");
             return uri.ToString();
         }
+
         public static AudioType GetAudioType(string extension)
         {
-            if (extension == ".wav") return AudioType.WAV;
-            if (extension == ".ogg") return AudioType.OGGVORBIS;
-            if (extension == ".s3m") return AudioType.S3M;
-            if (extension == ".mod") return AudioType.MOD;
-            if (extension == ".it") return AudioType.IT;
-            if (extension == ".xm") return AudioType.XM;
-            if (extension == ".aiff" || extension == ".aif") return AudioType.AIFF;
-            return AudioType.UNKNOWN;
+            switch (extension)
+            {
+                case ".wav":
+                    return AudioType.WAV;
+                case ".ogg":
+                    return AudioType.OGGVORBIS;
+                case ".s3m":
+                    return AudioType.S3M;
+                case ".mod":
+                    return AudioType.MOD;
+                case ".it":
+                    return AudioType.IT;
+                case ".xm":
+                    return AudioType.XM;
+                case ".aiff":
+                case ".aif":
+                    return AudioType.AIFF;
+                case ".mp3":
+                    logger.LogWarning("Warning! MP3 file support in this version of Unity is very limited, your audio might not work!");
+                    return AudioType.MPEG;
+                default:
+                    return AudioType.UNKNOWN;
+            }
         }
 
         void DirectoryScan(string path)
@@ -63,8 +83,16 @@ namespace MusicReplacer
             foreach (string file in files)
             {
                 Logger.LogDebug("File located: " + file);
-                AudioTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), file);
-                Logger.LogInfo("Added replacement track: " + Path.GetFileNameWithoutExtension(file).ToLower());
+                AuxTrack auxTrack = new AuxTrack
+                {
+                    Name = Path.GetFileNameWithoutExtension(file).ToLower(),
+                    FilePath = file,
+                    LoopStart = 0f,
+                    LoopEnd = 0f
+                };
+
+                AudioTracks.Add(auxTrack.Name, auxTrack);
+                Logger.LogInfo("Added replacement track: " + auxTrack.Name);
             }
 
         }
@@ -78,15 +106,17 @@ namespace MusicReplacer
                 string ext = Path.GetExtension(file);
                 if (File.Exists(file) && (GetAudioType(ext) == AudioType.OGGVORBIS || GetAudioType(ext) == AudioType.WAV))
                 {
-                    WWW audioLoader = new(FilePathToFileUrl(file));
-                    AudioClip SFXClip = audioLoader.GetAudioClip(false, false, GetAudioType(ext));
-                    while (!(SFXClip.loadState == AudioDataLoadState.Loaded))
+                    using (WWW audioLoader = new(FilePathToFileUrl(file)))
                     {
-                        System.Threading.Thread.Sleep(1);
+                        AudioClip SFXClip = audioLoader.GetAudioClip(false, false, GetAudioType(ext));
+                        while (!(SFXClip.loadState == AudioDataLoadState.Loaded))
+                        {
+                            System.Threading.Thread.Sleep(1);
+                        }
+                        SFXClip.hideFlags = HideFlags.DontUnloadUnusedAsset;
+                        SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), SFXClip);
+                        Logger.LogInfo("Added replacement SFX: " + Path.GetFileNameWithoutExtension(file).ToLower());
                     }
-                    SFXClip.hideFlags = HideFlags.DontUnloadUnusedAsset;
-                    SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), SFXClip);
-                    Logger.LogInfo("Added replacement SFX: " + Path.GetFileNameWithoutExtension(file).ToLower());
                 }
             }
         }
@@ -110,8 +140,9 @@ namespace MusicReplacer
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FPAudio), nameof(FPAudio.PlayMusic), new Type[] { typeof(AudioClip), typeof(float) })]
-        static void Prefix(ref AudioClip bgmMusic, ref FPAudioLoopData[] ___musicLoopPoints)
+        static void PlayMusicPrefix(ref AudioClip bgmMusic, out string trackName)
         {
+            trackName = "";
             if (Plugin.LastTrack != null)
             {
                 Object.Destroy(Plugin.LastTrack);
@@ -121,39 +152,51 @@ namespace MusicReplacer
             if (bgmMusic == null) return;
             if (Plugin.AudioTracks.ContainsKey(bgmMusic.name.ToLower()))
             {
-                string trackPath = Plugin.AudioTracks[bgmMusic.name.ToLower()];
-                string ext = Path.GetExtension(trackPath);
+                AuxTrack track = Plugin.AudioTracks[bgmMusic.name.ToLower()];
+                string ext = Path.GetExtension(track.FilePath);
                 bool stream = true;
                 if (ext == "")
                 {
                     ext = ".wav";
-                    trackPath += ext;
+                    track.FilePath += ext;
                 }
                 if (ext is ".mod" or ".s3m" or ".it" or ".xm")
                 {
                     stream = false;
                 }
-                if (File.Exists(trackPath) && Plugin.GetAudioType(ext) != AudioType.UNKNOWN)
+                if (File.Exists(track.FilePath) && Plugin.GetAudioType(ext) != AudioType.UNKNOWN)
                 {
-                    WWW audioLoader = new(Plugin.FilePathToFileUrl(trackPath));
-
-                    while (!audioLoader.isDone)
+                    using (WWW audioLoader = new(Plugin.FilePathToFileUrl(track.FilePath)))
                     {
-                        System.Threading.Thread.Sleep(1);
-                    }
-                    AudioClip selectedClip = audioLoader.GetAudioClip(false, stream, Plugin.GetAudioType(ext));
-                    while (!(selectedClip.loadState == AudioDataLoadState.Loaded))
-                    {
-                        System.Threading.Thread.Sleep(1);
-                    }
-                    selectedClip.name = (bgmMusic.name + "_modded").ToLower();
+                        while (!audioLoader.isDone)
+                        {
+                            System.Threading.Thread.Sleep(1);
+                        }
+                        AudioClip selectedClip = audioLoader.GetAudioClip(false, stream, Plugin.GetAudioType(ext));
+                        while (!(selectedClip.loadState == AudioDataLoadState.Loaded))
+                        {
+                            System.Threading.Thread.Sleep(1);
+                        }
+                        selectedClip.name = (bgmMusic.name + "_modded").ToLower();
+                        trackName = bgmMusic.name.ToLower();
 
-                    bgmMusic = selectedClip;
-                    Plugin.LastTrack = selectedClip;
+                        bgmMusic = selectedClip;
+                        Plugin.LastTrack = selectedClip;
+                    }
                 }
-
             }
         }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(FPAudio), nameof(FPAudio.PlayMusic), new Type[] { typeof(AudioClip), typeof(float) })]
+        static void Prefix(string trackName,ref float ___loopStart, ref float ___loopEnd)
+        {
+            if (trackName.IsNullOrWhiteSpace()) { return; }
+
+
+
+        }
+
     }
 
     class PatchSFXPlayer
