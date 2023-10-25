@@ -16,8 +16,9 @@ namespace MusicReplacer
     [BepInProcess("FP2.exe")]
     public class Plugin : BaseUnityPlugin
     {
-        public static string AudioPath = Path.Combine(Paths.ExecutablePath, "mod_overrides\\MusicReplacements");
-        public static string SFXPath = Path.Combine(Paths.ExecutablePath, "mod_overrides\\SFXReplacements");
+        public static string AudioPath = Path.Combine(Paths.GameRootPath, "mod_overrides\\MusicReplacements");
+        public static string SFXPath = Path.Combine(Paths.GameRootPath, "mod_overrides\\SFXReplacements");
+        internal static ConfigFile loopConfig = new ConfigFile(Path.Combine(Paths.GameRootPath, "mod_overrides\\MusicReplacements\\custom_loops.cfg"), true);
         public static Dictionary<string, AuxTrack> AudioTracks = new();
         public static Dictionary<string, AudioClip> SFXTracks = new();
         public static AudioClip LastTrack;
@@ -73,25 +74,28 @@ namespace MusicReplacer
             foreach (string file in files)
             {
                 Logger.LogDebug("File located: " + file);
-                string trackName = Path.GetFileNameWithoutExtension(file).ToLower();
-
-                ConfigEntry<float> confLoopStart = Config.Bind(trackName,"Loop start",0f);
-                ConfigEntry<float> confLoopEnd = Config.Bind(trackName, "Loop End", 0f);
-
-                AuxTrack auxTrack = new AuxTrack
+                if (Path.GetExtension(file) != ".cfg")
                 {
-                    Name = trackName,
-                    FilePath = file,
-                    LoopStart = confLoopStart.Value,
-                    LoopEnd = confLoopEnd.Value,
-                    Type = GetAudioType(Path.GetExtension(file))
-                };
+                    string trackName = Path.GetFileNameWithoutExtension(file).ToLower();
 
-                AudioTracks.Add(auxTrack.Name, auxTrack);
-                logger.LogInfo("Added replacement track: " + auxTrack.Name);
-                if (auxTrack.Type == AudioType.MPEG)
-                {
-                    logger.LogWarning("Warning! MP3 file support in this version of Unity is very limited, your audio might not work!");
+                    ConfigEntry<float> confLoopStart = loopConfig.Bind(trackName, "Loop start", 0f);
+                    ConfigEntry<float> confLoopEnd = loopConfig.Bind(trackName, "Loop End", 0f);
+
+                    AuxTrack auxTrack = new AuxTrack
+                    {
+                        Name = trackName,
+                        FilePath = file,
+                        LoopStart = confLoopStart.Value,
+                        LoopEnd = confLoopEnd.Value,
+                        Type = GetAudioType(Path.GetExtension(file))
+                    };
+
+                    AudioTracks.Add(auxTrack.Name, auxTrack);
+                    logger.LogInfo("Added replacement track: " + auxTrack.Name);
+                    if (auxTrack.Type == AudioType.MPEG)
+                    {
+                        logger.LogWarning("Warning! MP3 file support in this version of Unity is very limited, your audio might not work!");
+                    }
                 }
             }
         }
