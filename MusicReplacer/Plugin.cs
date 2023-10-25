@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using Object = UnityEngine.Object;
 using System.Reflection.Emit;
 using BepInEx.Logging;
+using BepInEx.Configuration;
 
 namespace MusicReplacer
 {
@@ -15,8 +16,8 @@ namespace MusicReplacer
     [BepInProcess("FP2.exe")]
     public class Plugin : BaseUnityPlugin
     {
-        public static string AudioPath = Path.Combine(Path.GetFullPath("."), "mod_overrides\\MusicReplacements");
-        public static string SFXPath = Path.Combine(Path.GetFullPath("."), "mod_overrides\\SFXReplacements");
+        public static string AudioPath = Path.Combine(Paths.ExecutablePath, "mod_overrides\\MusicReplacements");
+        public static string SFXPath = Path.Combine(Paths.ExecutablePath, "mod_overrides\\SFXReplacements");
         public static Dictionary<string, AuxTrack> AudioTracks = new();
         public static Dictionary<string, AudioClip> SFXTracks = new();
         public static AudioClip LastTrack;
@@ -52,29 +53,18 @@ namespace MusicReplacer
 
         public static AudioType GetAudioType(string extension)
         {
-            switch (extension)
+            return extension switch
             {
-                case ".wav":
-                    return AudioType.WAV;
-                case ".ogg":
-                    return AudioType.OGGVORBIS;
-                case ".s3m":
-                    return AudioType.S3M;
-                case ".mod":
-                    return AudioType.MOD;
-                case ".it":
-                    return AudioType.IT;
-                case ".xm":
-                    return AudioType.XM;
-                case ".aiff":
-                case ".aif":
-                    return AudioType.AIFF;
-                case ".mp3":
-                    logger.LogWarning("Warning! MP3 file support in this version of Unity is very limited, your audio might not work!");
-                    return AudioType.MPEG;
-                default:
-                    return AudioType.UNKNOWN;
-            }
+                ".wav" => AudioType.WAV,
+                ".ogg" => AudioType.OGGVORBIS,
+                ".s3m" => AudioType.S3M,
+                ".mod" => AudioType.MOD,
+                ".it" => AudioType.IT,
+                ".xm" => AudioType.XM,
+                ".aiff" or ".aif" => AudioType.AIFF,
+                ".mp3" => AudioType.MPEG,
+                _ => AudioType.UNKNOWN,
+            };
         }
 
         void DirectoryScan(string path)
@@ -83,18 +73,27 @@ namespace MusicReplacer
             foreach (string file in files)
             {
                 Logger.LogDebug("File located: " + file);
+                string trackName = Path.GetFileNameWithoutExtension(file).ToLower();
+
+                ConfigEntry<float> confLoopStart = Config.Bind(trackName,"Loop start",0f);
+                ConfigEntry<float> confLoopEnd = Config.Bind(trackName, "Loop End", 0f);
+
                 AuxTrack auxTrack = new AuxTrack
                 {
-                    Name = Path.GetFileNameWithoutExtension(file).ToLower(),
+                    Name = trackName,
                     FilePath = file,
-                    LoopStart = 0f,
-                    LoopEnd = 0f
+                    LoopStart = confLoopStart.Value,
+                    LoopEnd = confLoopEnd.Value,
+                    Type = GetAudioType(Path.GetExtension(file))
                 };
 
                 AudioTracks.Add(auxTrack.Name, auxTrack);
-                Logger.LogInfo("Added replacement track: " + auxTrack.Name);
+                logger.LogInfo("Added replacement track: " + auxTrack.Name);
+                if (auxTrack.Type == AudioType.MPEG)
+                {
+                    logger.LogWarning("Warning! MP3 file support in this version of Unity is very limited, your audio might not work!");
+                }
             }
-
         }
 
         void SFXScan(string path)
@@ -140,9 +139,9 @@ namespace MusicReplacer
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FPAudio), nameof(FPAudio.PlayMusic), new Type[] { typeof(AudioClip), typeof(float) })]
-        static void PlayMusicPrefix(ref AudioClip bgmMusic, out string trackName)
+        static void PlayMusicPrefix(ref AudioClip bgmMusic, out AuxTrack __state)
         {
-            trackName = "";
+            __state = null;
             if (Plugin.LastTrack != null)
             {
                 Object.Destroy(Plugin.LastTrack);
@@ -164,7 +163,7 @@ namespace MusicReplacer
                 {
                     stream = false;
                 }
-                if (File.Exists(track.FilePath) && Plugin.GetAudioType(ext) != AudioType.UNKNOWN)
+                if (File.Exists(track.FilePath) && track.Type != AudioType.UNKNOWN)
                 {
                     using (WWW audioLoader = new(Plugin.FilePathToFileUrl(track.FilePath)))
                     {
@@ -178,8 +177,7 @@ namespace MusicReplacer
                             System.Threading.Thread.Sleep(1);
                         }
                         selectedClip.name = (bgmMusic.name + "_modded").ToLower();
-                        trackName = bgmMusic.name.ToLower();
-
+                        __state = track;
                         bgmMusic = selectedClip;
                         Plugin.LastTrack = selectedClip;
                     }
@@ -189,12 +187,12 @@ namespace MusicReplacer
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(FPAudio), nameof(FPAudio.PlayMusic), new Type[] { typeof(AudioClip), typeof(float) })]
-        static void Prefix(string trackName,ref float ___loopStart, ref float ___loopEnd)
+        static void PlayMusicPostfix(AuxTrack __state, ref float ___loopStart, ref float ___loopEnd)
         {
-            if (trackName.IsNullOrWhiteSpace()) { return; }
-
-
-
+            if (__state == null) return;
+            Plugin.logger.LogDebug("Loaded track loop data for:" + __state.Name + "\n Loop start:" + __state.LoopStart + "\n Loop End:" + __state.LoopEnd);
+            ___loopEnd = __state.LoopEnd; 
+            ___loopStart = __state.LoopStart;
         }
 
     }
@@ -238,7 +236,7 @@ namespace MusicReplacer
         [HarmonyPatch(typeof(MergaBloodMoon), "Activate", MethodType.Normal)]
         [HarmonyPatch(typeof(MergaSupermoon), "Activate", MethodType.Normal)]
         [HarmonyPatch(typeof(MergaLilith), "Activate", MethodType.Normal)]
-        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        static IEnumerable<CodeInstruction> MergaPhaseTranspiler(IEnumerable<CodeInstruction> instructions)
         {
             List<CodeInstruction> codes = new(instructions);
             for (int i = 5; i < codes.Count; i++)
