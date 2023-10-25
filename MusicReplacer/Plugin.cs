@@ -101,7 +101,7 @@ namespace MusicReplacer
             string[] files = Directory.GetFiles(path);
             foreach (string file in files)
             {
-                Logger.LogDebug("SFX File located: " + file);
+                logger.LogDebug("SFX File located: " + file);
                 string ext = Path.GetExtension(file);
                 if (File.Exists(file) && (GetAudioType(ext) == AudioType.OGGVORBIS || GetAudioType(ext) == AudioType.WAV))
                 {
@@ -114,7 +114,7 @@ namespace MusicReplacer
                         }
                         SFXClip.hideFlags = HideFlags.DontUnloadUnusedAsset;
                         SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), SFXClip);
-                        Logger.LogInfo("Added replacement SFX: " + Path.GetFileNameWithoutExtension(file).ToLower());
+                        logger.LogInfo("Added replacement SFX: " + Path.GetFileNameWithoutExtension(file).ToLower());
                     }
                 }
             }
