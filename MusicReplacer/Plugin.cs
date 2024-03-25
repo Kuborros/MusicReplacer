@@ -269,8 +269,8 @@ namespace MusicReplacer
             if (Plugin.SFXTracks.ContainsKey(clip.name.ToLower() + "_" + Plugin.currLanguage))
             {
                 Plugin.logger.LogDebug("Playing language specific sfx for lang: " + Plugin.currLanguage);
-                Plugin.SFXTracks[clip.name.ToLower()].name = clip.name;
-                clip = Plugin.SFXTracks[clip.name.ToLower()];
+                Plugin.SFXTracks[clip.name.ToLower() + "_" + Plugin.currLanguage].name = clip.name;
+                clip = Plugin.SFXTracks[clip.name.ToLower() + "_" + Plugin.currLanguage];
                 return;
             }
             //Fallback to non-language ones
@@ -297,8 +297,8 @@ namespace MusicReplacer
             if (Plugin.SFXTracks.ContainsKey(value.name.ToLower() + "_" + Plugin.currLanguage))
             {
                 Plugin.logger.LogDebug("Playing language specific sfx for lang: " + Plugin.currLanguage);
-                Plugin.SFXTracks[value.name.ToLower()].name = value.name;
-                value = Plugin.SFXTracks[value.name.ToLower()];
+                Plugin.SFXTracks[value.name.ToLower() + "_" + Plugin.currLanguage].name = value.name;
+                value = Plugin.SFXTracks[value.name.ToLower() + "_" + Plugin.currLanguage];
                 return;
             }
             //Fallback to non-language specific
