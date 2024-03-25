@@ -154,9 +154,12 @@ namespace MusicReplacer
                         {
                             logger.LogDebug("SFX located in subdirectory: " + subdir + ", language tag applied.");
                             SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower() + "_" + subdir, SFXClip);
+                            logger.LogInfo("Added localised replacement SFX: " + Path.GetFileNameWithoutExtension(file).ToLower() + ". Lang: " + subdir);
                         }
-                        else SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), SFXClip);
-                        logger.LogInfo("Added replacement SFX: " + Path.GetFileNameWithoutExtension(file).ToLower());
+                        else {
+                            SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), SFXClip);
+                            logger.LogInfo("Added global replacement SFX: " + Path.GetFileNameWithoutExtension(file).ToLower());
+                        }
                     }
                 }
             }
