@@ -1,26 +1,28 @@
 ﻿using BepInEx;
-using System.IO;
-using System.Text;
-using System;
-using UnityEngine;
-using HarmonyLib;
-using System.Collections.Generic;
-using Object = UnityEngine.Object;
-using System.Reflection.Emit;
-using BepInEx.Logging;
 using BepInEx.Configuration;
+using BepInEx.Logging;
+using HarmonyLib;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection.Emit;
+using System.Text;
+using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace MusicReplacer
 {
-    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "1.2.0")]
+    [BepInPlugin("com.kuborro.plugins.fp2.musicreplacer", "MusicReplacerMod", "2.0.0")]
     [BepInProcess("FP2.exe")]
     public class Plugin : BaseUnityPlugin
     {
         public static string AudioPath = Path.Combine(Paths.GameRootPath, "mod_overrides\\MusicReplacements");
         public static string SFXPath = Path.Combine(Paths.GameRootPath, "mod_overrides\\SFXReplacements");
         internal static ConfigFile loopConfig = new ConfigFile(Path.Combine(Paths.GameRootPath, "mod_overrides\\MusicReplacements\\custom_loops.cfg"), true);
+        internal static ConfigEntry<bool> preloadTracks;
         public static Dictionary<string, AuxTrack> AudioTracks = new();
         public static Dictionary<string, AudioClip> SFXTracks = new();
+        internal static string currLanguage = "english";
         public static AudioClip LastTrack;
         public static ManualLogSource logger = BepInEx.Logging.Logger.CreateLogSource("Music Replacer");
 
@@ -70,11 +72,15 @@ namespace MusicReplacer
 
         void DirectoryScan(string path)
         {
+            if (preloadTracks.Value) logger.LogMessage("Preloading tracks into memory! This will take a moment.");
+
             string[] files = Directory.GetFiles(path);
             foreach (string file in files)
             {
+                string ext = Path.GetExtension(file);
                 Logger.LogDebug("File located: " + file);
-                if (Path.GetExtension(file) != ".cfg")
+
+                if (GetAudioType(Path.GetExtension(file)) != AudioType.UNKNOWN)
                 {
                     string trackName = Path.GetFileNameWithoutExtension(file).ToLower();
 
@@ -87,9 +93,34 @@ namespace MusicReplacer
                         FilePath = file,
                         LoopStart = confLoopStart.Value,
                         LoopEnd = confLoopEnd.Value,
-                        Type = GetAudioType(Path.GetExtension(file))
+                        Preloaded = false,
+                        Type = GetAudioType(ext)
                     };
 
+                    if (preloadTracks.Value)
+                    {
+                        try
+                        {
+                            using (WWW audioLoader = new(FilePathToFileUrl(file)))
+                            {
+                                while (!audioLoader.isDone)
+                                {
+                                    System.Threading.Thread.Sleep(1);
+                                }
+                                AudioClip selectedClip = audioLoader.GetAudioClip(false, false, auxTrack.Type);
+                                while (!(selectedClip.loadState == AudioDataLoadState.Loaded))
+                                {
+                                    System.Threading.Thread.Sleep(1);
+                                }
+                                auxTrack.AudioClip = selectedClip;
+                            }
+                            auxTrack.Preloaded = true;
+                        }
+                        catch (Exception e)
+                        {
+                            logger.LogError("Issue encountered while preloading track: " + e.Message);
+                        }
+                    }
                     AudioTracks.Add(auxTrack.Name, auxTrack);
                     logger.LogInfo("Added replacement track: " + auxTrack.Name);
                     if (auxTrack.Type == AudioType.MPEG)
@@ -102,11 +133,13 @@ namespace MusicReplacer
 
         void SFXScan(string path)
         {
-            string[] files = Directory.GetFiles(path);
+            string[] files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
             foreach (string file in files)
             {
                 logger.LogDebug("SFX File located: " + file);
+                string subdir = file.Replace(path, "").Replace(Path.GetFileName(file), "").Replace("\\", "").Replace("/","").ToLower();
                 string ext = Path.GetExtension(file);
+
                 if (File.Exists(file) && (GetAudioType(ext) == AudioType.OGGVORBIS || GetAudioType(ext) == AudioType.WAV))
                 {
                     using (WWW audioLoader = new(FilePathToFileUrl(file)))
@@ -117,7 +150,12 @@ namespace MusicReplacer
                             System.Threading.Thread.Sleep(1);
                         }
                         SFXClip.hideFlags = HideFlags.DontUnloadUnusedAsset;
-                        SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), SFXClip);
+                        if (!subdir.IsNullOrWhiteSpace())
+                        {
+                            logger.LogDebug("SFX located in subdirectory: " + subdir + ", language tag applied.");
+                            SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower() + "_" + subdir, SFXClip);
+                        }
+                        else SFXTracks.Add(Path.GetFileNameWithoutExtension(file).ToLower(), SFXClip);
                         logger.LogInfo("Added replacement SFX: " + Path.GetFileNameWithoutExtension(file).ToLower());
                     }
                 }
@@ -126,6 +164,10 @@ namespace MusicReplacer
 
         private void Awake()
         {
+            preloadTracks = Config.Bind("Music Playback", "Preload Music", false, "Preload music tracks into memory on startup.\n" +
+            "Greatly extends memory usage and load times, prevents load stutter on slower HDD and massive files.\n" +
+            "When false, tracks are streamed on-demand from HDD.");
+
             Directory.CreateDirectory(AudioPath);
             DirectoryScan(AudioPath);
             Directory.CreateDirectory(SFXPath);
@@ -156,6 +198,17 @@ namespace MusicReplacer
             if (Plugin.AudioTracks.ContainsKey(bgmMusic.name.ToLower()))
             {
                 AuxTrack track = Plugin.AudioTracks[bgmMusic.name.ToLower()];
+
+                if (track.Preloaded && track.AudioClip != null)
+                {
+                    AudioClip selectedClip = track.AudioClip;
+                    selectedClip.name = (bgmMusic.name + "_modded").ToLower();
+                    __state = track;
+                    bgmMusic = selectedClip;
+                    Plugin.LastTrack = null;
+                    return;
+                }
+
                 string ext = Path.GetExtension(track.FilePath);
                 bool stream = true;
                 if (ext == "")
@@ -195,7 +248,7 @@ namespace MusicReplacer
         {
             if (__state == null) return;
             Plugin.logger.LogDebug("Loaded track loop data for:" + __state.Name + "\n Loop start:" + __state.LoopStart + "\n Loop End:" + __state.LoopEnd);
-            ___loopEnd = __state.LoopEnd; 
+            ___loopEnd = __state.LoopEnd;
             ___loopStart = __state.LoopStart;
         }
 
@@ -207,8 +260,21 @@ namespace MusicReplacer
         [HarmonyPatch(typeof(AudioSource), nameof(AudioSource.PlayOneShot), new Type[] { typeof(AudioClip), typeof(float) })]
         static void Prefix(ref AudioClip clip)
         {
+
+            //FOR TESTING ONLY, replace with fp2lib call when available
+            Plugin.currLanguage = "polish";
             if (clip == null) return;
-            if (Plugin.SFXTracks.ContainsKey(clip.name.ToLower()))
+
+            //Language specific SFX
+            if (Plugin.SFXTracks.ContainsKey(clip.name.ToLower() + "_" + Plugin.currLanguage))
+            {
+                Plugin.logger.LogDebug("Playing language specific sfx for lang: " + Plugin.currLanguage);
+                Plugin.SFXTracks[clip.name.ToLower()].name = clip.name;
+                clip = Plugin.SFXTracks[clip.name.ToLower()];
+                return;
+            }
+            //Fallback to non-language ones
+            else if (Plugin.SFXTracks.ContainsKey(clip.name.ToLower()))
             {
                 Plugin.SFXTracks[clip.name.ToLower()].name = clip.name;
                 clip = Plugin.SFXTracks[clip.name.ToLower()];
@@ -223,7 +289,19 @@ namespace MusicReplacer
         [HarmonyPatch(typeof(AudioSource), nameof(AudioSource.clip), MethodType.Setter)]
         static void Prefix(ref AudioClip value)
         {
+            //FOR TESTING ONLY, replace with fp2lib call when available
+            Plugin.currLanguage = "polish";
             if (value == null) return;
+            
+            //Language specific SFX
+            if (Plugin.SFXTracks.ContainsKey(value.name.ToLower() + "_" + Plugin.currLanguage))
+            {
+                Plugin.logger.LogDebug("Playing language specific sfx for lang: " + Plugin.currLanguage);
+                Plugin.SFXTracks[value.name.ToLower()].name = value.name;
+                value = Plugin.SFXTracks[value.name.ToLower()];
+                return;
+            }
+            //Fallback to non-language specific
             if (Plugin.SFXTracks.ContainsKey(value.name.ToLower()))
             {
                 Plugin.SFXTracks[value.name.ToLower()].name = value.name;
