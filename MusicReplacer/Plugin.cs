@@ -317,7 +317,6 @@ namespace MusicReplacer
     class PatchMergaFight
     {
         [HarmonyTranspiler]
-        [HarmonyPatch(typeof(MergaBlueMoon), "Activate", MethodType.Normal)]
         [HarmonyPatch(typeof(MergaBloodMoon), "Activate", MethodType.Normal)]
         [HarmonyPatch(typeof(MergaSupermoon), "Activate", MethodType.Normal)]
         [HarmonyPatch(typeof(MergaLilith), "Activate", MethodType.Normal)]
